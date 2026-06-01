@@ -1,0 +1,1 @@
+{"evictions":0,"hit_rate":0.862,"hits":431,"latencia_cache_p50_ms":0.75,"latencia_cache_p95_ms":0.86,"latencia_db_p50_ms":189.04,"latencia_db_p95_ms":338.6,"miss_rate":0.138,"misses":69,"total_consultas":500}

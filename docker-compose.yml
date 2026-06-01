@@ -1,0 +1,128 @@
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - red_sistema
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - red_sistema
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    command: >
+      redis-server
+      --maxmemory ${REDIS_MAXMEMORY:-50mb}
+      --maxmemory-policy ${REDIS_POLICY:-allkeys-lru}
+      --save ""
+    networks:
+      - red_sistema
+
+  metricas:
+    build: ./metricas
+    container_name: metricas_servicio
+    ports:
+      - "8001:8001"
+    depends_on:
+      - kafka
+      - redis
+    networks:
+      - red_sistema
+
+  generador_respuestas:
+    build:
+      context: ./generador_respuestas
+      dockerfile: Dockerfile
+    container_name: generador_respuestas_servicio
+    environment:
+      - METRICAS_URL=http://metricas:8001
+    volumes:
+      - ./datos:/datos
+    depends_on:
+      - metricas
+    ports:
+      - "8002:8002"
+    networks:
+      - red_sistema
+
+  cache_service:
+    build: ./cache_service
+    container_name: cache_servicio
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RESPUESTAS_URL=http://generador_respuestas:8002
+      - METRICAS_URL=http://metricas:8001
+      - CACHE_TTL=${CACHE_TTL:-120}
+    depends_on:
+      - redis
+      - generador_respuestas
+    ports:
+      - "8003:8003"
+    networks:
+      - red_sistema
+
+  kafka_consumer:
+    build: ./kafka_consumer
+    
+    environment:
+      - CACHE_URL=http://cache_service:8003
+      - METRICAS_URL=http://metricas:8001
+    depends_on:
+      - kafka
+      - cache_service
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
+    networks:
+      - red_sistema
+
+  kafka_retry_consumer:
+    build: ./kafka_retry_consumer
+    
+    environment:
+      - CACHE_URL=http://cache_service:8003
+      - METRICAS_URL=http://metricas:8001
+    depends_on:
+      - kafka
+      - cache_service
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
+    networks:
+      - red_sistema
+
+  generador_trafico:
+    build: ./generador_trafico
+    container_name: generador_trafico_servicio
+    environment:
+      - METRICAS_URL=http://metricas:8001
+      - DISTRIBUCION=${DISTRIBUCION:-zipf}
+      - TOTAL_CONSULTAS=${TOTAL_CONSULTAS:-500}
+      - CONSULTAS_POR_SEGUNDO=${CONSULTAS_POR_SEGUNDO:-10}
+    depends_on:
+      - kafka
+      - metricas
+    networks:
+      - red_sistema
+
+networks:
+  red_sistema:
+    driver: bridge
