@@ -1,116 +1,152 @@
-# Tarea 1 — Sistemas Distribuidos 2026-1
+# Tarea 2 - Sistemas Distribuidos
 
-Sistema distribuido de caché para consultas geoespaciales sobre el dataset **Google Open Buildings**.
+## Descripción
 
----
+Esta tarea consiste en extender la solución desarrollada en la Tarea 1 incorporando Apache Kafka para el procesamiento asíncrono de consultas.
 
-## Consultas implementadas
-
-- **Q1** — Conteo de edificios por zona (con filtro de confianza)
-- **Q2** — Área promedio y total
-- **Q3** — Densidad de edificaciones por km²
-- **Q4** — Comparación de densidad entre zonas
-- **Q5** — Histograma del score de confianza
+El sistema utiliza Redis como caché para mejorar los tiempos de respuesta y Kafka para desacoplar la generación y el procesamiento de consultas. Además, se implementó un mecanismo de reintentos y una cola DLQ para manejar errores.
 
 ---
 
-## Requisitos
+## Tecnologías utilizadas
 
-- Docker
-- Docker Compose
-- Archivo de datos:
-  ```
-  datos/edificios.csv.gz
-  ```
+* Python
+* Flask
+* Docker
+* Docker Compose
+* Redis
+* Apache Kafka
+* Zookeeper
 
 ---
 
-## Estructura del proyecto
+## Arquitectura
 
+```text
+Generador de Tráfico
+        |
+        v
+      Kafka
+        |
+        v
+Kafka Consumer
+        |
+        v
+ Cache Service
+    |        |
+    v        v
+ Redis   Generador de Respuestas
+
+Errores
+   |
+   v
+Retry Topic
+   |
+   v
+Kafka Retry Consumer
+   |
+   +--> Recuperación
+   |
+   +--> DLQ
 ```
-tarea1/
-├── datos/                        # Dataset CSV comprimido
-│   └── edificios.csv.gz
-├── generador_trafico/
-│   ├── app.py                    # Genera consultas (Zipf o uniforme)
-│   └── Dockerfile
-├── cache_service/
-│   ├── app.py                    # Intercepta consultas, usando Redis
-│   └── Dockerfile
-├── generador_respuestas/
-│   ├── app.py                    # Procesa consultas Q1–Q5 en memoria
-│   └── Dockerfile
-├── metricas/
-│   ├── app.py                    # Registra hits, misses, latencias
-│   └── Dockerfile
-├── docker-compose.yml
-├── ejecutar_experimentos.sh      # Script para todos los experimentos
-└── README.md
-```
 
 ---
 
-## Levantar el sistema base
+## Servicios
 
-### 1. Iniciar servicios
+### Generador de Tráfico
+
+Genera consultas y las publica en Kafka.
+
+### Kafka Consumer
+
+Consume las consultas desde Kafka y las envía al sistema para su procesamiento.
+
+### Kafka Retry Consumer
+
+Reprocesa las consultas que fallaron durante el primer intento.
+
+### Cache Service
+
+Gestiona el acceso a Redis y determina si una consulta corresponde a un hit o un miss.
+
+### Generador de Respuestas
+
+Obtiene la información desde el conjunto de datos cuando la respuesta no se encuentra en caché.
+
+### Servicio de Métricas
+
+Registra estadísticas relacionadas con el funcionamiento del sistema.
+
+---
+
+## Tópicos Kafka
+
+* `consultas`
+* `consultas_retry`
+* `consultas_dlq`
+
+---
+
+## Ejecución
+
+Levantar todos los servicios:
 
 ```bash
-docker compose up -d redis metricas generador_respuestas cache_service
+docker compose up --build
 ```
 
-### 2. Esperar carga de datos
-
-Esperar aproximadamente **30 segundos** para que el servicio `generador_respuestas` cargue el dataset en memoria.
-
-### 3. Verificar carga
+Ver contenedores en ejecución:
 
 ```bash
-docker logs generador_respuestas_servicio
+docker compose ps
+```
+
+Detener servicios:
+
+```bash
+docker compose down -v
 ```
 
 ---
 
-## Ejecutar consultas (generador de tráfico)
+## Métricas
 
-### Distribución Zipf (por defecto)
+Las métricas pueden consultarse en:
 
-```bash
-docker compose run --rm -e DISTRIBUCION=zipf generador_trafico
+```text
+http://localhost:8001/metricas
 ```
 
-### Distribución uniforme
+Se registran métricas como:
 
-```bash
-docker compose run --rm -e DISTRIBUCION=uniforme generador_trafico
-```
+* Hit Rate
+* Miss Rate
+* Retry Rate
+* Recovery Rate
+* DLQ Rate
+* Latencias de procesamiento
 
 ---
 
+## Manejo de errores
 
-## Ejecutar todos los experimentos
+Cuando una consulta falla:
 
-```bash
-chmod +x ejecutar_experimentos.sh
-./ejecutar_experimentos.sh
-```
-
-Esto ejecuta automáticamente todos los escenarios y guarda los resultados en:
-
-```
-resultados/
-```
+1. Se envía al tópico `consultas_retry`.
+2. Se intenta reprocesar.
+3. Si se recupera correctamente se registra como recovery.
+4. Si supera el número máximo de intentos se envía a `consultas_dlq`.
 
 ---
 
-## Endpoints disponibles
+## Integrantes
 
-| Servicio             | Puerto | Endpoints útiles                  |
-|---------------------|--------|----------------------------------|
-| Métricas            | 8001   | GET /metricas, POST /reiniciar   |
-| Generador Respuestas| 8002   | GET /zonas,                      |
-| Cache Service       | 8003   | GET /estado_cache, POST /limpiar_cache |
+* Jose Avello
+* Alvaro Valdebenito
 
 ---
 
+## Asignatura
 
-
+Sistemas Distribuidos
