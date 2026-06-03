@@ -85,6 +85,7 @@ Registra estadísticas relacionadas con el funcionamiento del sistema.
 - `consultas`: tópico principal donde se publican las consultas generadas.
 - `retry_topic`: tópico utilizado para reenviar consultas que fallaron durante su procesamiento.
 - `dlq`: cola de mensajes muertos (Dead Letter Queue) para consultas que no pudieron recuperarse después de varios intentos.
+  
 ---
 
 ## Ejecución
@@ -132,11 +133,11 @@ Se registran métricas como:
 
 Cuando una consulta falla:
 
-1. Se envía al tópico `consultas_retry`.
+1. Se envía al tópico `retry_topic`.
 2. Se intenta reprocesar.
 3. Si se recupera correctamente se registra como recovery.
-4. Si supera el número máximo de intentos se envía a `consultas_dlq`.
-
+4. Si supera el número máximo de intentos se envía a `dlq`.
+   
 ---
 
 ## Integrantes
