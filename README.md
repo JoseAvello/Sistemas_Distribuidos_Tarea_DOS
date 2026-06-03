@@ -82,10 +82,9 @@ Registra estadísticas relacionadas con el funcionamiento del sistema.
 
 ## Tópicos Kafka
 
-* `consultas`
-* `consultas_retry`
-* `consultas_dlq`
-
+- `consultas`: tópico principal donde se publican las consultas generadas.
+- `retry_topic`: tópico utilizado para reenviar consultas que fallaron durante su procesamiento.
+- `dlq`: cola de mensajes muertos (Dead Letter Queue) para consultas que no pudieron recuperarse después de varios intentos.
 ---
 
 ## Ejecución
